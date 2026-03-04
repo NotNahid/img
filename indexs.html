@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Exhibition</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&display=swap" rel="stylesheet"/>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; background:#000; overflow:hidden; cursor:none; }
+
+    /* ── SLIDES ── */
+    #stage { position:fixed; inset:0; }
+    .slide { position:absolute; inset:0; opacity:0; transition:opacity 3s ease; }
+    .slide.active { opacity:1; }
+    .slide img { width:100%; height:100%; object-fit:cover; object-position:center; display:block; }
+
+    /* ── GHOST LABEL ── */
+    #label {
+      position:fixed; bottom:52px; left:50%; transform:translateX(-50%);
+      z-index:10; text-align:center; opacity:0; transition:opacity 2s ease;
+      pointer-events:none; white-space:nowrap;
+    }
+    #label.show { opacity:1; }
+    #label .title {
+      font-family:'Cormorant Garamond', serif; font-style:italic;
+      font-size:clamp(13px,1.5vw,22px); color:rgba(255,255,255,0.25); letter-spacing:0.08em;
+    }
+    #label .artist {
+      font-family:'Cormorant Garamond', serif; font-size:clamp(10px,1vw,15px);
+      color:rgba(255,255,255,0.14); letter-spacing:0.18em; margin-top:4px;
+    }
+
+    /* ── HIT ZONES (invisible, for cursor hover detection) ── */
+    /* Left third = prev, Right third = next, Top-right corner = settings */
+    #zone-prev, #zone-next, #zone-settings {
+      position:fixed; z-index:50;
+      display:flex; align-items:center; justify-content:center;
+    }
+    #zone-prev    { top:0; left:0;    width:30%; height:100%; }
+    #zone-next    { top:0; right:0;   width:30%; height:100%; }
+    #zone-settings{ top:0; right:0;   width:120px; height:120px; z-index:60; }
+
+    /* Zone highlight when cursor is inside */
+    .zone-label {
+      font-family:'Cormorant Garamond', serif;
+      font-style:italic;
+      font-size:clamp(14px, 2vw, 28px);
+      color:rgba(255,255,255,0);
+      letter-spacing:0.12em;
+      transition:color 0.3s ease;
+      pointer-events:none;
+      user-select:none;
+    }
+    .zone-active .zone-label { color:rgba(255,255,255,0.22); }
+
+    /* settings icon in corner */
+    #zone-settings .settings-icon {
+      position:absolute; top:22px; right:22px;
+      width:38px; height:38px; border-radius:50%;
+      background:rgba(255,255,255,0);
+      border:1px solid rgba(255,255,255,0);
+      display:flex; align-items:center; justify-content:center;
+      transition:background 0.3s, border-color 0.3s;
+    }
+    #zone-settings .settings-icon svg { width:16px; height:16px; fill:rgba(255,255,255,0); transition:fill 0.3s; }
+    .zone-active .settings-icon {
+      background:rgba(255,255,255,0.09) !important;
+      border-color:rgba(255,255,255,0.18) !important;
+    }
+    .zone-active .settings-icon svg { fill:rgba(255,255,255,0.5) !important; }
+
+    /* ── TV CURSOR ── */
+    #tv-cursor {
+      position:fixed; z-index:1000; pointer-events:none;
+      width:28px; height:28px;
+      transform:translate(-50%, -50%);
+      transition:left 0.12s ease, top 0.12s ease, opacity 0.6s ease;
+      opacity:0; /* hidden until d-pad used */
+    }
+    #tv-cursor.visible { opacity:1; }
+    #tv-cursor .dot {
+      position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+      width:10px; height:10px; border-radius:50%;
+      background:rgba(255,255,255,0.9);
+      box-shadow:0 0 0 3px rgba(255,255,255,0.2), 0 0 12px rgba(255,255,255,0.3);
+      transition:transform 0.15s ease, background 0.15s ease;
+    }
+    #tv-cursor .ring {
+      position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+      width:28px; height:28px; border-radius:50%;
+      border:1.5px solid rgba(255,255,255,0.35);
+      transition:transform 0.15s ease, opacity 0.15s ease;
+    }
+    #tv-cursor.pressing .dot { transform:translate(-50%,-50%) scale(0.6); background:#fff; }
+    #tv-cursor.pressing .ring { transform:translate(-50%,-50%) scale(1.5); opacity:0; }
+    #tv-cursor.on-action .dot { background:rgba(255,255,255,1); box-shadow:0 0 0 4px rgba(255,255,255,0.25), 0 0 20px rgba(255,255,255,0.4); }
+
+    /* ── SETTINGS PANEL ── */
+    #settings-panel {
+      position:fixed; top:70px; right:22px; z-index:199;
+      width:270px;
+      background:rgba(8,7,5,0.88);
+      border:1px solid rgba(255,255,255,0.1);
+      border-radius:14px; padding:24px 22px 20px;
+      backdrop-filter:blur(20px);
+      opacity:0; pointer-events:none;
+      transform:translateY(-8px) scale(0.97);
+      transition:opacity 0.3s ease, transform 0.3s ease;
+      font-family:'Cormorant Garamond', serif;
+    }
+    #settings-panel.open { opacity:1; pointer-events:all; transform:translateY(0) scale(1); }
+
+    .sp-title { font-size:11px; letter-spacing:0.38em; color:rgba(255,255,255,0.3); text-transform:uppercase; margin-bottom:20px; }
+    .sp-row { margin-bottom:18px; }
+    .sp-label { font-size:12px; letter-spacing:0.15em; color:rgba(255,255,255,0.4); display:flex; justify-content:space-between; align-items:center; margin-bottom:9px; }
+    .sp-label span { color:rgba(255,255,255,0.75); font-style:italic; font-size:14px; }
+
+    input[type=range] {
+      -webkit-appearance:none; appearance:none; width:100%; height:2px;
+      background:rgba(255,255,255,0.12); border-radius:2px; outline:none; cursor:pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance:none; width:18px; height:18px; border-radius:50%;
+      background:rgba(255,255,255,0.7); border:2px solid rgba(255,255,255,0.3);
+    }
+
+    .sp-toggle { display:flex; align-items:center; gap:10px; cursor:pointer; }
+    .toggle-track {
+      width:34px; height:18px; border-radius:9px;
+      background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.15);
+      position:relative; transition:background 0.3s; flex-shrink:0;
+    }
+    .toggle-track.on { background:rgba(255,255,255,0.38); }
+    .toggle-thumb {
+      position:absolute; top:3px; left:3px; width:11px; height:11px; border-radius:50%;
+      background:rgba(255,255,255,0.5); transition:left 0.25s, background 0.25s;
+    }
+    .toggle-track.on .toggle-thumb { left:19px; background:#fff; }
+
+    .sp-select {
+      width:100%; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12);
+      border-radius:7px; padding:8px 12px; color:rgba(255,255,255,0.6);
+      font-family:'Cormorant Garamond',serif; font-size:14px; outline:none;
+      appearance:none; -webkit-appearance:none; cursor:pointer;
+    }
+    .sp-select option { background:#111; color:#ccc; }
+
+    .sp-divider { height:1px; background:rgba(255,255,255,0.08); margin:18px 0; }
+    .sp-apply {
+      width:100%; padding:10px; background:rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.14); border-radius:7px;
+      color:rgba(255,255,255,0.55); font-family:'Cormorant Garamond',serif;
+      font-size:14px; letter-spacing:0.18em; cursor:pointer; transition:background 0.2s, color 0.2s;
+    }
+    .sp-apply:hover, .sp-apply:focus { background:rgba(255,255,255,0.16); color:rgba(255,255,255,0.9); outline:none; }
+
+    /* ── CONTROLS HINT (bottom center, fades after a bit) ── */
+    #hint {
+      position:fixed; bottom:16px; left:50%; transform:translateX(-50%);
+      z-index:20; pointer-events:none;
+      font-family:'Cormorant Garamond',serif; font-style:italic;
+      font-size:clamp(10px,1vw,13px); color:rgba(255,255,255,0.18);
+      letter-spacing:0.22em; white-space:nowrap;
+      opacity:1; transition:opacity 1.5s ease;
+    }
+    #hint.hidden { opacity:0; }
+
+    /* ── LOADER ── */
+    #loader {
+      position:fixed; inset:0; z-index:300;
+      display:flex; align-items:center; justify-content:center;
+      background:#000; transition:opacity 2s ease;
+    }
+    #loader.hide { opacity:0; pointer-events:none; }
+    #loader span {
+      font-family:'Cormorant Garamond',serif; font-style:italic;
+      font-size:clamp(12px,1.4vw,18px); color:rgba(255,255,255,0.18);
+      letter-spacing:0.3em; animation:pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:0.18} 50%{opacity:0.45} }
+  </style>
+</head>
+<body>
+
+<div id="loader"><span>gathering works…</span></div>
+<div id="stage"></div>
+
+<div id="label">
+  <div class="title"  id="l-title"></div>
+  <div class="artist" id="l-artist"></div>
+</div>
+
+<!-- invisible hit zones -->
+<div id="zone-prev"><span class="zone-label">← prev</span></div>
+<div id="zone-next"><span class="zone-label">next →</span></div>
+<div id="zone-settings">
+  <div class="settings-icon">
+    <svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 018.5 12 3.5 3.5 0 0112 8.5a3.5 3.5 0 013.5 3.5 3.5 3.5 0 01-3.5 3.5m7.43-2.92c.04-.34.07-.69.07-1.08s-.03-.74-.07-1.08l2.32-1.82c.21-.16.27-.45.13-.69l-2.2-3.81c-.13-.24-.42-.32-.65-.24l-2.74 1.1c-.57-.44-1.18-.8-1.86-1.08l-.41-2.92A.488.488 0 0014 2h-4c-.25 0-.46.18-.5.42l-.41 2.92c-.68.28-1.29.64-1.86 1.08l-2.74-1.1c-.24-.09-.52 0-.65.24L1.64 9.37c-.14.24-.08.53.13.69l2.32 1.82c-.04.34-.07.69-.07 1.08s.03.74.07 1.08L1.77 15.96c-.21.16-.27.45-.13.69l2.2 3.81c.13.24.42.32.65.24l2.74-1.1c.57.44 1.18.8 1.86 1.08l.41 2.92c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.41-2.92c.68-.28 1.29-.64 1.86-1.08l2.74 1.1c.24.09.52 0 .65-.24l2.2-3.81c.14-.24.08-.53-.13-.69l-2.32-1.82z"/></svg>
+  </div>
+</div>
+
+<!-- TV cursor -->
+<div id="tv-cursor">
+  <div class="ring"></div>
+  <div class="dot"></div>
+</div>
+
+<!-- key hint -->
+<div id="hint">d-pad to move · OK to select · ← → to change painting</div>
+
+<!-- Settings panel -->
+<div id="settings-panel">
+  <div class="sp-title">Exhibition Settings</div>
+  <div class="sp-row">
+    <div class="sp-label">Display time <span id="dur-val">12s</span></div>
+    <input type="range" id="dur-slider" min="4" max="60" step="2" value="12"/>
+  </div>
+  <div class="sp-row">
+    <div class="sp-label">Crossfade <span id="fade-val">3s</span></div>
+    <input type="range" id="fade-slider" min="1" max="8" step="0.5" value="3"/>
+  </div>
+  <div class="sp-row">
+    <div class="sp-label">Show title & artist</div>
+    <div class="sp-toggle">
+      <div class="toggle-track on" id="label-track"><div class="toggle-thumb"></div></div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.4);" id="label-toggle-txt">enabled</div>
+    </div>
+  </div>
+  <div class="sp-row" id="labeldur-row">
+    <div class="sp-label">Label stays for <span id="labeldur-val">5.5s</span></div>
+    <input type="range" id="labeldur-slider" min="2" max="20" step="0.5" value="5.5"/>
+  </div>
+  <div class="sp-divider"></div>
+  <div class="sp-row">
+    <div class="sp-label" style="margin-bottom:9px;">Collection</div>
+    <select class="sp-select" id="cat-select">
+      <option value="random">🎲 Random each session</option>
+      <option value="Paintings_in_the_Louvre">Louvre, Paris</option>
+      <option value="Paintings_in_the_Prado">Prado, Madrid</option>
+      <option value="Paintings_in_the_Uffizi">Uffizi, Florence</option>
+      <option value="Paintings_in_the_Rijksmuseum">Rijksmuseum, Amsterdam</option>
+      <option value="Paintings_in_the_Metropolitan_Museum_of_Art">The Met, New York</option>
+      <option value="Paintings_in_the_National_Gallery,_London">National Gallery, London</option>
+      <option value="Paintings_in_the_Hermitage">Hermitage, St. Petersburg</option>
+      <option value="Impressionist_paintings">Impressionism</option>
+      <option value="Baroque_paintings">Baroque</option>
+      <option value="Renaissance_paintings">Renaissance</option>
+      <option value="Oil_paintings_by_Dutch_Golden_Age_painters">Dutch Golden Age</option>
+    </select>
+  </div>
+  <div class="sp-row">
+    <div class="sp-label" style="margin-bottom:9px;">Image fit</div>
+    <select class="sp-select" id="fit-select">
+      <option value="cover">Fill screen (crop)</option>
+      <option value="contain">Fit whole painting</option>
+    </select>
+  </div>
+  <div class="sp-divider"></div>
+  <button class="sp-apply" id="apply-btn">Apply & Restart</button>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════
+const CFG = { showMs:12000, fadeMs:3000, labelMs:5500, showLabel:true, category:'random', fit:'cover' };
+
+const CATEGORIES = [
+  'Paintings_in_the_Louvre','Paintings_in_the_Prado','Paintings_in_the_Uffizi',
+  'Paintings_in_the_Rijksmuseum','Paintings_in_the_Metropolitan_Museum_of_Art',
+  'Paintings_in_the_National_Gallery,_London','Paintings_in_the_Hermitage',
+  'Impressionist_paintings','Baroque_paintings','Renaissance_paintings',
+  'Oil_paintings_by_Dutch_Golden_Age_painters',
+];
+const getCategory = () => CFG.category==='random'
+  ? CATEGORIES[Math.floor(Math.random()*CATEGORIES.length)] : CFG.category;
+
+// ══════════════════════════════════════════
+//  TV CURSOR
+// ══════════════════════════════════════════
+const cursor = document.getElementById('tv-cursor');
+
+// Start cursor in centre of screen
+let cx = window.innerWidth  / 2;
+let cy = window.innerHeight / 2;
+const STEP = 38; // px per d-pad press
+
+let cursorHideTimer;
+function showCursor() {
+  cursor.classList.add('visible');
+  clearTimeout(cursorHideTimer);
+  cursorHideTimer = setTimeout(() => cursor.classList.remove('visible'), 3000);
+}
+
+function moveCursor(dx, dy) {
+  cx = Math.max(0, Math.min(window.innerWidth,  cx + dx));
+  cy = Math.max(0, Math.min(window.innerHeight, cy + dy));
+  cursor.style.left = cx + 'px';
+  cursor.style.top  = cy + 'px';
+  showCursor();
+  checkZones();
+}
+
+// Update cursor position on init
+cursor.style.left = cx + 'px';
+cursor.style.top  = cy + 'px';
+
+// Which zone is cursor in?
+let currentZone = null; // 'prev' | 'next' | 'settings' | null
+
+function getZoneAt(x, y) {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  // Settings corner: top-right 120×120
+  if (x > w - 120 && y < 120) return 'settings';
+  // Prev: left 30%
+  if (x < w * 0.30) return 'prev';
+  // Next: right 30%
+  if (x > w * 0.70) return 'next';
+  return null;
+}
+
+function checkZones() {
+  const zone = getZoneAt(cx, cy);
+
+  // Update visual zones
+  document.getElementById('zone-prev').classList.toggle('zone-active', zone==='prev');
+  document.getElementById('zone-next').classList.toggle('zone-active', zone==='next');
+  document.getElementById('zone-settings').classList.toggle('zone-active', zone==='settings');
+
+  cursor.classList.toggle('on-action', zone !== null);
+  currentZone = zone;
+}
+
+function pressCursor() {
+  cursor.classList.add('pressing');
+  setTimeout(()=>cursor.classList.remove('pressing'), 300);
+
+  if (panelOpen) {
+    // If panel is open, OK = close it
+    if (currentZone === null) { closePanel(); return; }
+  }
+
+  if (currentZone === 'prev')     { goPrev(); return; }
+  if (currentZone === 'next')     { goNext(); return; }
+  if (currentZone === 'settings') { togglePanel(); return; }
+  // Centre area = next painting
+  goNext();
+}
+
+// ══════════════════════════════════════════
+//  KEYBOARD — remapped for TV remote d-pad
+// ══════════════════════════════════════════
+// TV remotes send: ArrowUp/Down/Left/Right for d-pad, Enter for OK
+// We use d-pad to MOVE cursor. OK/Enter = press.
+// But we ALSO keep Left/Right as direct prev/next shortcuts.
+
+let hintTimer;
+const hint = document.getElementById('hint');
+
+function resetHint() {
+  clearTimeout(hintTimer);
+  hint.classList.remove('hidden');
+  hintTimer = setTimeout(()=>hint.classList.add('hidden'), 5000);
+}
+resetHint();
+
+document.addEventListener('keydown', e => {
+  resetHint();
+
+  // If settings panel is open, let native focus handle it EXCEPT Escape
+  if (panelOpen && e.key !== 'Escape') {
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+      // move cursor inside panel area for visual feedback only
+      const dx = e.key==='ArrowRight'?STEP:e.key==='ArrowLeft'?-STEP:0;
+      const dy = e.key==='ArrowDown'?STEP:e.key==='ArrowUp'?-STEP:0;
+      moveCursor(dx, dy);
+    }
+    return;
+  }
+
+  switch(e.key) {
+    case 'ArrowUp':    moveCursor(0,   -STEP); break;
+    case 'ArrowDown':  moveCursor(0,    STEP); break;
+    case 'ArrowLeft':
+      // If cursor is in left zone or anywhere, move cursor left
+      // BUT if cursor already at far left, just go prev directly
+      if (cx <= STEP + 10) { goPrev(); }
+      else { moveCursor(-STEP, 0); }
+      break;
+    case 'ArrowRight':
+      if (cx >= window.innerWidth - STEP - 10) { goNext(); }
+      else { moveCursor(STEP, 0); }
+      break;
+    case 'Enter':
+    case ' ':
+      pressCursor();
+      break;
+    case 'Escape':
+      if (panelOpen) closePanel();
+      break;
+    // Some remotes send these
+    case 'MediaPlayPause':
+    case 'MediaPlay':
+      goNext(); break;
+  }
+  e.preventDefault();
+});
+
+// ══════════════════════════════════════════
+//  POOL & FETCH
+// ══════════════════════════════════════════
+let pool = [], seen = new Set(), fetchDone = false, continueToken = null, sessionCat = '';
+
+async function fetchPage() {
+  let url =
+    `https://commons.wikimedia.org/w/api.php?action=query` +
+    `&list=categorymembers&cmtitle=Category:${encodeURIComponent(sessionCat)}` +
+    `&cmtype=file&cmlimit=30&cmnamespace=6&format=json&origin=*`;
+  if (continueToken) url += `&cmcontinue=${encodeURIComponent(continueToken)}`;
+  try {
+    const data = await (await fetch(url)).json();
+    continueToken = data?.continue?.cmcontinue || null;
+    if (!continueToken) fetchDone = true;
+    const members = data?.query?.categorymembers || [];
+    if (!members.length) { fetchDone=true; return; }
+    const titles = members.map(m=>m.title).join('|');
+    const infoData = await (await fetch(
+      `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(titles)}` +
+      `&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=1920&format=json&origin=*`
+    )).json();
+    for (const page of Object.values(infoData?.query?.pages||{})) {
+      const ii = page.imageinfo?.[0];
+      if (!ii || ii.width<1000 || ii.width<ii.height) continue;
+      const imgUrl = ii.thumburl||ii.url;
+      if (!imgUrl||seen.has(imgUrl)) continue;
+      const meta  = ii.extmetadata||{};
+      const clean = s=>(s||'').replace(/<[^>]+>/g,'').trim().slice(0,60);
+      pool.push({
+        url:imgUrl,
+        title:clean(meta.ObjectName?.value||page.title.replace('File:','').replace(/\.[^.]+$/,'')),
+        artist:[clean(meta.Artist?.value||''),clean((meta.DateTimeOriginal||meta.Date)?.value||'')].filter(Boolean).join(' · ').slice(0,70),
+      });
+      seen.add(imgUrl);
+    }
+    for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+  } catch(e) { console.warn('fetch failed',e); }
+}
+
+async function getFromPool() {
+  if (pool.length<5&&!fetchDone) fetchPage().catch(()=>{});
+  if (pool.length===0) await fetchPage();
+  return pool.shift()||null;
+}
+
+// ══════════════════════════════════════════
+//  SLIDES & HISTORY
+// ══════════════════════════════════════════
+const stage  = document.getElementById('stage');
+const label  = document.getElementById('label');
+const loader = document.getElementById('loader');
+
+let slideA, slideB, activeSlot=0;
+let history=[], histIdx=-1;
+let tick, labelOut, isBusy=false;
+
+function makeSlide() {
+  const s=document.createElement('div'); s.className='slide';
+  s.style.transition=`opacity ${CFG.fadeMs/1000}s ease`;
+  const img=document.createElement('img'); img.style.objectFit=CFG.fit;
+  s.appendChild(img); stage.appendChild(s); return s;
+}
+
+function loadImg(slide,p) {
+  return new Promise((res,rej)=>{
+    const img=slide.querySelector('img');
+    img.style.objectFit=CFG.fit;
+    const t=setTimeout(()=>rej('timeout'),12000);
+    img.onload=()=>{clearTimeout(t);res();};
+    img.onerror=()=>{clearTimeout(t);rej();};
+    img.src=p.url; img.alt=p.title;
+    if(img.complete&&img.naturalWidth>0){clearTimeout(t);res();}
+  });
+}
+
+function showLabel(p) {
+  if(!CFG.showLabel){label.classList.remove('show');return;}
+  clearTimeout(labelOut);
+  document.getElementById('l-title').textContent =p.title||'';
+  document.getElementById('l-artist').textContent=p.artist||'';
+  label.classList.remove('show');
+  requestAnimationFrame(()=>requestAnimationFrame(()=>label.classList.add('show')));
+  labelOut=setTimeout(()=>label.classList.remove('show'),CFG.labelMs);
+}
+
+function swap(p){
+  const inc=activeSlot===0?slideB:slideA;
+  const out=activeSlot===0?slideA:slideB;
+  out.classList.remove('active'); inc.classList.add('active');
+  activeSlot=1-activeSlot; showLabel(p);
+}
+
+async function goNext(){
+  if(isBusy)return; isBusy=true; clearTimeout(tick);
+  if(histIdx<history.length-1){
+    histIdx++;
+    const p=history[histIdx];
+    const inc=activeSlot===0?slideB:slideA;
+    try{await loadImg(inc,p);}catch{isBusy=false;goNext();return;}
+    swap(p); isBusy=false; tick=setTimeout(goNext,CFG.showMs); return;
+  }
+  let p=null;
+  while(!p){
+    const c=await getFromPool();
+    if(!c){isBusy=false;tick=setTimeout(goNext,2000);return;}
+    const inc=activeSlot===0?slideB:slideA;
+    try{await loadImg(inc,c);p=c;}catch{}
+  }
+  history.push(p); histIdx=history.length-1;
+  swap(p); isBusy=false; tick=setTimeout(goNext,CFG.showMs);
+}
+
+async function goPrev(){
+  if(isBusy||histIdx<=0)return;
+  isBusy=true; clearTimeout(tick);
+  histIdx--;
+  const p=history[histIdx];
+  const inc=activeSlot===0?slideB:slideA;
+  try{await loadImg(inc,p);}catch{}
+  swap(p); isBusy=false; tick=setTimeout(goNext,CFG.showMs);
+}
+
+async function startShow(){
+  let first=null;
+  while(!first){
+    const c=pool.shift();
+    if(!c){await fetchPage();continue;}
+    try{await loadImg(slideA,c);first=c;}catch{}
+  }
+  history=[first]; histIdx=0;
+  loader.classList.add('hide');
+  setTimeout(()=>{try{loader.remove();}catch{}},2200);
+  slideA.classList.add('active'); activeSlot=0;
+  showLabel(first); tick=setTimeout(goNext,CFG.showMs);
+  document.documentElement.requestFullscreen().catch(()=>{});
+}
+
+async function restartShow(){
+  clearTimeout(tick);clearTimeout(labelOut);
+  isBusy=false;history=[];histIdx=-1;
+  pool=[];seen=new Set();fetchDone=false;continueToken=null;
+  sessionCat=getCategory();
+  slideA.classList.remove('active');slideB.classList.remove('active');
+  activeSlot=0;label.classList.remove('show');
+  await fetchPage(); await startShow();
+}
+
+window.addEventListener('load',async()=>{
+  slideA=makeSlide(); slideB=makeSlide();
+  sessionCat=getCategory();
+  await fetchPage(); startShow();
+});
+
+// ══════════════════════════════════════════
+//  SETTINGS PANEL
+// ══════════════════════════════════════════
+const panel       = document.getElementById('settings-panel');
+const labelTrack  = document.getElementById('label-track');
+const durSlider   = document.getElementById('dur-slider');
+const fadeSlider  = document.getElementById('fade-slider');
+const ldSlider    = document.getElementById('labeldur-slider');
+let panelOpen     = false;
+let labelEnabled  = true;
+
+function togglePanel(){ panelOpen?closePanel():openPanel(); }
+function openPanel(){ panelOpen=true; panel.classList.add('open'); }
+function closePanel(){ panelOpen=false; panel.classList.remove('open'); }
+
+durSlider.addEventListener('input', ()=>document.getElementById('dur-val').textContent=durSlider.value+'s');
+fadeSlider.addEventListener('input',()=>document.getElementById('fade-val').textContent=fadeSlider.value+'s');
+ldSlider.addEventListener('input',  ()=>document.getElementById('labeldur-val').textContent=ldSlider.value+'s');
+
+labelTrack.addEventListener('click',()=>{
+  labelEnabled=!labelEnabled;
+  labelTrack.classList.toggle('on',labelEnabled);
+  document.getElementById('label-toggle-txt').textContent=labelEnabled?'enabled':'disabled';
+  document.getElementById('labeldur-row').style.opacity=labelEnabled?'1':'0.3';
+});
+
+document.getElementById('apply-btn').addEventListener('click',()=>{
+  CFG.showMs   =parseInt(durSlider.value)*1000;
+  CFG.fadeMs   =parseFloat(fadeSlider.value)*1000;
+  CFG.labelMs  =parseFloat(ldSlider.value)*1000;
+  CFG.showLabel=labelEnabled;
+  CFG.category =document.getElementById('cat-select').value;
+  CFG.fit      =document.getElementById('fit-select').value;
+  document.querySelectorAll('.slide').forEach(s=>s.style.transition=`opacity ${CFG.fadeMs/1000}s ease`);
+  document.querySelectorAll('.slide img').forEach(img=>img.style.objectFit=CFG.fit);
+  closePanel(); restartShow();
+});
+
+// mouse fallback (for non-TV use)
+document.addEventListener('mousemove', e=>{ cx=e.clientX; cy=e.clientY; checkZones(); });
+document.addEventListener('click', e=>{
+  if(e.target.closest('#settings-panel')) return;
+  pressCursor();
+});
+</script>
+</body>
+</html>
