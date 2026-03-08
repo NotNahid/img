@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Exhibition</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Cormorant+SC:wght@300;400&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; background:#0a0906; overflow:hidden; cursor:none; }
+
+    /* ── GRAIN OVERLAY ── */
+    #grain {
+      position:fixed; inset:-50%; z-index:900; pointer-events:none;
+      width:200%; height:200%;
+      opacity:0.032;
+      background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+      animation: grain-shift 0.4s steps(1) infinite;
+    }
+    @keyframes grain-shift {
+      0%  { transform: translate(0, 0); }
+      20% { transform: translate(-3%, -5%); }
+      40% { transform: translate(5%, -2%); }
+      60% { transform: translate(-2%,  6%); }
+      80% { transform: translate( 4%,  3%); }
+     100% { transform: translate(-1%, -4%); }
+    }
+
+    /* ── VIGNETTE ── */
+    #vignette {
+      position:fixed; inset:0; z-index:5; pointer-events:none;
+      background: radial-gradient(ellipse at center,
+        transparent 30%,
+        rgba(0,0,0,0.28) 60%,
+        rgba(0,0,0,0.72) 100%
+      );
+    }
+
+    /* ── STAGE / SLIDES ── */
+    #stage { position:fixed; inset:0; }
+
+    .slide {
+      position:absolute; inset:0; opacity:0;
+      transition: opacity var(--fade-duration, 3s) ease;
+      overflow:hidden;
+    }
+    .slide.active { opacity:1; }
+
+    .slide img {
+      width:100%; height:100%;
+      object-fit:cover; object-position:center;
+      display:block;
+      transform-origin: center center;
+      will-change: transform;
+    }
+
+    /* Ken Burns: each new active slide gets an animation */
+    .slide.active img {
+      animation: ken-burns var(--show-duration, 12s) ease-in-out forwards;
+    }
+    @keyframes ken-burns {
+      0%   { transform: scale(1.0) translate(0%, 0%); }
+      100% { transform: scale(1.06) translate(-1.2%, 0.6%); }
+    }
+    .slide.active.kb-alt img {
+      animation: ken-burns-alt var(--show-duration, 12s) ease-in-out forwards;
+    }
+    @keyframes ken-burns-alt {
+      0%   { transform: scale(1.06) translate(0.8%, -0.4%); }
+      100% { transform: scale(1.0) translate(0%, 0%); }
+    }
+
+
+    /* ── LABEL ── */
+    #label {
+      position:fixed; bottom:44px; left:50%; transform:translateX(-50%);
+      z-index:15; text-align:center;
+      opacity:0;
+      transition: opacity 0.6s ease, transform 0.6s ease;
+      transform: translateX(-50%) translateY(10px);
+      pointer-events:none; white-space:nowrap;
+    }
+    #label.show {
+      opacity:1;
+      transform: translateX(-50%) translateY(0px);
+    }
+    #label-inner {
+      display:inline-block;
+      padding: 0;
+    }
+    #label .title {
+      font-family:'Cormorant Garamond', serif;
+      font-style:italic; font-weight:300;
+      font-size: clamp(11px, 1vw, 15px);
+      color: rgba(255,255,255,0.32);
+      letter-spacing: 0.08em;
+    }
+    #label .artist {
+      font-family:'Cormorant SC', serif;
+      font-weight:300;
+      font-size: clamp(8px, 0.7vw, 10px);
+      color: rgba(255,255,255,0.18);
+      letter-spacing: 0.26em;
+      margin-top: 4px;
+      text-transform: uppercase;
+    }
+
+    /* ── HIT ZONES ── */
+    #zone-prev, #zone-next, #zone-settings {
+      position:fixed; z-index:50;
+      display:flex; align-items:center; justify-content:center;
+    }
+    #zone-prev    { top:0; left:0;  width:28%; height:100%; }
+    #zone-next    { top:0; right:0; width:28%; height:100%; }
+    #zone-settings{ top:0; right:0; width:120px; height:120px; z-index:60; }
+
+    .zone-label { display: none; }
+
+    /* Subtle edge gradient on hover */
+    #zone-prev::before, #zone-next::before {
+      content:''; position:absolute; inset:0; pointer-events:none;
+      opacity:0; transition:opacity 0.4s ease;
+    }
+    #zone-prev::before { background: linear-gradient(to right, rgba(255,255,255,0.03) 0%, transparent 100%); }
+    #zone-next::before { background: linear-gradient(to left,  rgba(255,255,255,0.03) 0%, transparent 100%); }
+    #zone-prev.zone-active::before, #zone-next.zone-active::before { opacity:1; }
+
+    /* Settings icon */
+    #zone-settings .settings-icon {
+      position:absolute; top:20px; right:20px;
+      width:36px; height:36px; border-radius:50%;
+      background: rgba(255,255,255,0);
+      border: 1px solid rgba(255,255,255,0);
+      display:flex; align-items:center; justify-content:center;
+      transition: background 0.35s, border-color 0.35s, box-shadow 0.35s;
+    }
+    #zone-settings .settings-icon svg {
+      width:14px; height:14px; fill:rgba(255,255,255,0);
+      transition:fill 0.35s, transform 0.6s ease;
+    }
+    .zone-active .settings-icon {
+      background: rgba(255,255,255,0.08) !important;
+      border-color: rgba(255,255,255,0.16) !important;
+      box-shadow: 0 0 20px rgba(255,255,255,0.05);
+    }
+    .zone-active .settings-icon svg {
+      fill: rgba(255,255,255,0.5) !important;
+      transform: rotate(60deg);
+    }
+
+    /* ── TV CURSOR ── */
+    #tv-cursor {
+      position:fixed; z-index:1000; pointer-events:none;
+      width:28px; height:28px;
+      transform:translate(-50%, -50%);
+      opacity:0; transition:opacity 0.6s ease;
+    }
+    #tv-cursor.visible { opacity:1; }
+    #tv-cursor .dot {
+      position:absolute; top:50%; left:50%;
+      transform:translate(-50%,-50%);
+      width:8px; height:8px; border-radius:50%;
+      background: rgba(255,255,255,0.9);
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.15), 0 0 14px rgba(255,255,255,0.25);
+      transition:transform 0.15s ease, background 0.15s ease;
+    }
+    #tv-cursor .ring {
+      position:absolute; top:50%; left:50%;
+      transform:translate(-50%,-50%);
+      width:28px; height:28px; border-radius:50%;
+      border: 1px solid rgba(255,255,255,0.3);
+      transition:transform 0.15s ease, opacity 0.15s ease;
+    }
+    #tv-cursor.pressing .dot { transform:translate(-50%,-50%) scale(0.5); background:#fff; }
+    #tv-cursor.pressing .ring { transform:translate(-50%,-50%) scale(1.6); opacity:0; }
+    #tv-cursor.on-action .dot { background:rgba(255,255,255,1); box-shadow:0 0 0 4px rgba(255,255,255,0.2), 0 0 22px rgba(255,255,255,0.35); }
+
+    /* ── MOUSE CURSOR HIDE ON IDLE ── */
+    body.cursor-idle { cursor:none !important; }
+
+    /* ── SETTINGS PANEL ── */
+    #settings-panel {
+      position:fixed; top:68px; right:18px; z-index:199;
+      width:280px;
+      background: rgba(7,6,4,0.92);
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 12px;
+      padding: 26px 22px 22px;
+      backdrop-filter: blur(24px) saturate(0.8);
+      -webkit-backdrop-filter: blur(24px) saturate(0.8);
+      box-shadow: 0 32px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.03) inset;
+      opacity:0; pointer-events:none;
+      transform: translateY(-10px) scale(0.975);
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      font-family:'Cormorant Garamond', serif;
+    }
+    #settings-panel.open { opacity:1; pointer-events:all; transform:translateY(0) scale(1); }
+
+    .sp-title {
+      font-family:'Cormorant SC', serif;
+      font-size:10px; letter-spacing:0.42em;
+      color:rgba(255,255,255,0.25); text-transform:uppercase;
+      margin-bottom:22px;
+    }
+    .sp-row { margin-bottom:18px; }
+    .sp-label {
+      font-size:11px; letter-spacing:0.2em; text-transform:uppercase;
+      color:rgba(255,255,255,0.3);
+      display:flex; justify-content:space-between; align-items:center;
+      margin-bottom:10px;
+    }
+    .sp-label span {
+      font-family:'Cormorant Garamond', serif;
+      font-style:italic; font-size:15px;
+      color:rgba(255,255,255,0.65);
+      text-transform:none; letter-spacing:0;
+    }
+
+    input[type=range] {
+      -webkit-appearance:none; appearance:none;
+      width:100%; height:1px;
+      background:rgba(255,255,255,0.15); border-radius:1px;
+      outline:none; cursor:pointer;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance:none;
+      width:14px; height:14px; border-radius:50%;
+      background:rgba(255,255,255,0.75);
+      border:1.5px solid rgba(255,255,255,0.3);
+      box-shadow: 0 0 8px rgba(255,255,255,0.15);
+      transition: transform 0.15s, background 0.15s;
+    }
+    input[type=range]::-webkit-slider-thumb:hover {
+      transform:scale(1.25);
+      background:rgba(255,255,255,0.95);
+    }
+
+    .sp-toggle { display:flex; align-items:center; gap:10px; cursor:pointer; }
+    .toggle-track {
+      width:32px; height:17px; border-radius:9px;
+      background:rgba(255,255,255,0.08);
+      border:1px solid rgba(255,255,255,0.12);
+      position:relative; transition:background 0.3s, border-color 0.3s; flex-shrink:0;
+    }
+    .toggle-track.on { background:rgba(255,255,255,0.32); border-color:rgba(255,255,255,0.25); }
+    .toggle-thumb {
+      position:absolute; top:3px; left:3px;
+      width:10px; height:10px; border-radius:50%;
+      background:rgba(255,255,255,0.45);
+      transition:left 0.25s ease, background 0.25s;
+    }
+    .toggle-track.on .toggle-thumb { left:18px; background:#fff; }
+
+    .sp-select {
+      width:100%;
+      background:rgba(255,255,255,0.05);
+      border:1px solid rgba(255,255,255,0.1);
+      border-radius:6px; padding:9px 12px;
+      color:rgba(255,255,255,0.55);
+      font-family:'Cormorant Garamond', serif;
+      font-size:14px; outline:none;
+      appearance:none; -webkit-appearance:none; cursor:pointer;
+      transition:border-color 0.2s, background 0.2s;
+    }
+    .sp-select:focus { border-color:rgba(255,255,255,0.22); background:rgba(255,255,255,0.08); }
+    .sp-select option { background:#111; color:#bbb; }
+
+    .sp-divider { height:1px; background:rgba(255,255,255,0.07); margin:20px 0; }
+
+    .sp-apply {
+      width:100%; padding:10px 14px;
+      background:rgba(255,255,255,0.07);
+      border:1px solid rgba(255,255,255,0.12); border-radius:6px;
+      color:rgba(255,255,255,0.48);
+      font-family:'Cormorant SC', serif;
+      font-size:12px; letter-spacing:0.32em; text-transform:uppercase;
+      cursor:pointer;
+      transition:background 0.25s, color 0.25s, border-color 0.25s;
+    }
+    .sp-apply:hover, .sp-apply:focus {
+      background:rgba(255,255,255,0.14);
+      color:rgba(255,255,255,0.88);
+      border-color:rgba(255,255,255,0.22);
+      outline:none;
+    }
+
+    /* ── HINT ── */
+    #hint {
+      position:fixed; bottom:14px; left:50%; transform:translateX(-50%);
+      z-index:20; pointer-events:none;
+      font-family:'Cormorant Garamond', serif; font-style:italic;
+      font-size:clamp(10px, 0.9vw, 12px);
+      color:rgba(255,255,255,0.16);
+      letter-spacing:0.24em; white-space:nowrap;
+      opacity:1; transition:opacity 1.8s ease;
+    }
+    #hint.hidden { opacity:0; }
+
+    /* ── LOADER ── */
+    #loader {
+      position:fixed; inset:0; z-index:300;
+      display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:28px;
+      background:#0a0906;
+      transition:opacity 2.5s ease;
+    }
+    #loader.hide { opacity:0; pointer-events:none; }
+    #loader .loader-title {
+      font-family:'Cormorant SC', serif;
+      font-size:clamp(11px,1.2vw,15px);
+      color:rgba(255,255,255,0.12);
+      letter-spacing:0.55em; text-transform:uppercase;
+    }
+    #loader .loader-dots {
+      display:flex; gap:8px;
+    }
+    #loader .loader-dots span {
+      width:4px; height:4px; border-radius:50%;
+      background:rgba(255,255,255,0.18);
+      animation:dot-pulse 1.4s ease-in-out infinite;
+    }
+    #loader .loader-dots span:nth-child(2) { animation-delay:0.18s; }
+    #loader .loader-dots span:nth-child(3) { animation-delay:0.36s; }
+    @keyframes dot-pulse {
+      0%,80%,100% { transform:scale(0.6); opacity:0.2; }
+      40% { transform:scale(1); opacity:0.7; }
+    }
+
+    /* ── FLASH EFFECT (on manual nav) ── */
+    #flash {
+      position:fixed; inset:0; z-index:8;
+      background:rgba(255,255,255,0);
+      pointer-events:none;
+      transition:background 0.08s ease;
+    }
+    #flash.pop { background:rgba(255,255,255,0.04); }
+
+    /* Freeze ken-burns when paused */
+    body.paused .slide.active img {
+      animation-play-state: paused !important;
+    }
+
+    /* ── ZOOM ── */
+    #stage { transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94); transform-origin: 50% 50%; }
+    body.zoomed #stage { /* transform set dynamically */ }
+    body.zoomed { cursor: zoom-out !important; }
+    body:not(.zoomed) #stage { transform: scale(1) translate(0,0) !important; }
+
+  </style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="loader-title">gathering works</div>
+  <div class="loader-dots"><span></span><span></span><span></span></div>
+</div>
+
+<div id="grain"></div>
+<div id="vignette"></div>
+<div id="flash"></div>
+<div id="stage"></div>
+
+<div id="label">
+  <div id="label-inner">
+    <div class="title"  id="l-title"></div>
+    <div class="artist" id="l-artist"></div>
+  </div>
+</div>
+
+<!-- invisible hit zones -->
+<div id="zone-prev"></div>
+<div id="zone-center"></div>
+<div id="zone-next"></div>
+<div id="zone-settings">
+  <div class="settings-icon">
+    <svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 018.5 12 3.5 3.5 0 0112 8.5a3.5 3.5 0 013.5 3.5 3.5 3.5 0 01-3.5 3.5m7.43-2.92c.04-.34.07-.69.07-1.08s-.03-.74-.07-1.08l2.32-1.82c.21-.16.27-.45.13-.69l-2.2-3.81c-.13-.24-.42-.32-.65-.24l-2.74 1.1c-.57-.44-1.18-.8-1.86-1.08l-.41-2.92A.488.488 0 0014 2h-4c-.25 0-.46.18-.5.42l-.41 2.92c-.68.28-1.29.64-1.86 1.08l-2.74-1.1c-.24-.09-.52 0-.65.24L1.64 9.37c-.14.24-.08.53.13.69l2.32 1.82c-.04.34-.07.69-.07 1.08s.03.74.07 1.08L1.77 15.96c-.21.16-.27.45-.13.69l2.2 3.81c.13.24.42.32.65.24l2.74-1.1c.57.44 1.18.8 1.86 1.08l.41 2.92c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.41-2.92c.68-.28 1.29-.64 1.86-1.08l2.74 1.1c.24.09.52 0 .65-.24l2.2-3.81c.14-.24.08-.53-.13-.69l-2.32-1.82z"/></svg>
+  </div>
+</div>
+
+<div id="tv-cursor">
+  <div class="ring"></div>
+  <div class="dot"></div>
+</div>
+
+<div id="hint">← → to change · space or click to pause · gear for settings</div>
+
+<div id="settings-panel">
+  <div class="sp-title">Exhibition</div>
+
+  <div class="sp-row">
+    <div class="sp-label">Display time <span id="dur-val">12s</span></div>
+    <input type="range" id="dur-slider" min="4" max="60" step="2" value="12"/>
+  </div>
+  <div class="sp-row">
+    <div class="sp-label">Crossfade <span id="fade-val">3s</span></div>
+    <input type="range" id="fade-slider" min="1" max="8" step="0.5" value="3"/>
+  </div>
+  <div class="sp-row">
+    <div class="sp-label">Show label</div>
+    <div class="sp-toggle">
+      <div class="toggle-track on" id="label-track"><div class="toggle-thumb"></div></div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.35);font-family:'Cormorant Garamond',serif;font-style:italic;" id="label-toggle-txt">enabled</div>
+    </div>
+  </div>
+  <div class="sp-row" id="labeldur-row">
+    <div class="sp-label">Label duration <span id="labeldur-val">5.5s</span></div>
+    <input type="range" id="labeldur-slider" min="2" max="20" step="0.5" value="5.5"/>
+  </div>
+
+  <div class="sp-divider"></div>
+
+  <div class="sp-row">
+    <div class="sp-label" style="margin-bottom:10px;">Collection <span style="font-style:italic;font-size:12px;opacity:0.6;">reloads on change</span></div>
+    <select class="sp-select" id="cat-select">
+      <option value="random">🎲 Random each session</option>
+      <option value="Paintings_in_the_Louvre">Louvre, Paris</option>
+      <option value="Paintings_in_the_Prado">Prado, Madrid</option>
+      <option value="Paintings_in_the_Uffizi">Uffizi, Florence</option>
+      <option value="Paintings_in_the_Rijksmuseum">Rijksmuseum, Amsterdam</option>
+      <option value="Paintings_in_the_Metropolitan_Museum_of_Art">The Met, New York</option>
+      <option value="Paintings_in_the_National_Gallery,_London">National Gallery, London</option>
+      <option value="Paintings_in_the_Hermitage">Hermitage, St. Petersburg</option>
+      <option value="Impressionist_paintings">Impressionism</option>
+      <option value="Baroque_paintings">Baroque</option>
+      <option value="Renaissance_paintings">Renaissance</option>
+      <option value="Oil_paintings_by_Dutch_Golden_Age_painters">Dutch Golden Age</option>
+    </select>
+  </div>
+  <div class="sp-row">
+    <div class="sp-label" style="margin-bottom:10px;">Image fit</div>
+    <select class="sp-select" id="fit-select">
+      <option value="cover">Fill screen (crop)</option>
+      <option value="contain">Fit whole painting</option>
+    </select>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  CONFIG
+// ══════════════════════════════════════════
+const CFG = {
+  showMs:   12000,
+  fadeMs:   3000,
+  labelMs:  5500,
+  showLabel:true,
+  category: 'random',
+  fit:      'cover'
+};
+
+const CATEGORIES = [
+  'Paintings_in_the_Louvre','Paintings_in_the_Prado','Paintings_in_the_Uffizi',
+  'Paintings_in_the_Rijksmuseum','Paintings_in_the_Metropolitan_Museum_of_Art',
+  'Paintings_in_the_National_Gallery,_London','Paintings_in_the_Hermitage',
+  'Impressionist_paintings','Baroque_paintings','Renaissance_paintings',
+  'Oil_paintings_by_Dutch_Golden_Age_painters',
+];
+const getCategory = () => CFG.category === 'random'
+  ? CATEGORIES[Math.floor(Math.random()*CATEGORIES.length)]
+  : CFG.category;
+
+// ══════════════════════════════════════════
+//  CSS VAR SYNC
+// ══════════════════════════════════════════
+function syncCSSVars() {
+  document.documentElement.style.setProperty('--fade-duration', (CFG.fadeMs/1000)+'s');
+  document.documentElement.style.setProperty('--show-duration', (CFG.showMs/1000)+'s');
+}
+syncCSSVars();
+
+// ══════════════════════════════════════════
+//  PROGRESS TRACKING (internal only, no bar)
+// ══════════════════════════════════════════
+let progressStart = performance.now();
+let progressRAF;
+
+function startProgress(ms) {
+  cancelAnimationFrame(progressRAF);
+  progressStart = performance.now();
+}
+
+function stopProgress() {
+  cancelAnimationFrame(progressRAF);
+}
+
+// ══════════════════════════════════════════
+//  FLASH
+// ══════════════════════════════════════════
+const flash = document.getElementById('flash');
+function doFlash() {
+  flash.classList.add('pop');
+  setTimeout(() => flash.classList.remove('pop'), 100);
+}
+
+// ══════════════════════════════════════════
+//  PAUSE
+// ══════════════════════════════════════════
+let isPaused = false;
+let pausedTimeRemaining = 0;
+let pausedAt = 0;
+
+function pause() {
+  if (isPaused) return;
+  isPaused = true;
+  document.body.classList.add('paused');
+  pausedAt = performance.now();
+  pausedTimeRemaining = Math.max(0, CFG.showMs - (pausedAt - progressStart));
+  cancelAnimationFrame(progressRAF);
+  clearTimeout(tick);
+}
+
+function resume() {
+  if (!isPaused) return;
+  isPaused = false;
+  document.body.classList.remove('paused');
+  progressStart = performance.now() - (CFG.showMs - pausedTimeRemaining);
+  tick = setTimeout(goNext, pausedTimeRemaining);
+}
+
+function togglePause() {
+  isPaused ? resume() : pause();
+}
+
+// ══════════════════════════════════════════
+//  FULLSCREEN — auto on first interaction
+// ══════════════════════════════════════════
+let fsTriggered = false;
+function tryFullscreen() {
+  if (fsTriggered) return;
+  fsTriggered = true;
+  document.documentElement.requestFullscreen().catch(() => {});
+}
+document.addEventListener('click',   tryFullscreen, { once: true });
+document.addEventListener('keydown', tryFullscreen, { once: true });
+document.addEventListener('touchend',tryFullscreen, { once: true });
+
+// ══════════════════════════════════════════
+//  TV CURSOR
+// ══════════════════════════════════════════
+const cursor = document.getElementById('tv-cursor');
+let cx = window.innerWidth / 2;
+let cy = window.innerHeight / 2;
+const STEP = 36;
+let cursorHideTimer;
+
+function showCursor() {
+  cursor.classList.add('visible');
+  clearTimeout(cursorHideTimer);
+  cursorHideTimer = setTimeout(() => cursor.classList.remove('visible'), 3000);
+}
+function moveCursor(dx, dy) {
+  cx = Math.max(0, Math.min(window.innerWidth,  cx + dx));
+  cy = Math.max(0, Math.min(window.innerHeight, cy + dy));
+  cursor.style.left = cx + 'px';
+  cursor.style.top  = cy + 'px';
+  showCursor();
+  checkZones();
+}
+cursor.style.left = cx + 'px';
+cursor.style.top  = cy + 'px';
+
+let currentZone = null;
+function getZoneAt(x, y) {
+  const w = window.innerWidth, h = window.innerHeight;
+  if (x > w - 120 && y < 120) return 'settings';
+  if (x < w * 0.28) return 'prev';
+  if (x > w * 0.72) return 'next';
+  return 'center';
+}
+function checkZones() {
+  const zone = getZoneAt(cx, cy);
+  document.getElementById('zone-prev').classList.toggle('zone-active',     zone==='prev');
+  document.getElementById('zone-next').classList.toggle('zone-active',     zone==='next');
+  document.getElementById('zone-center').classList.toggle('zone-active',   zone==='center');
+  document.getElementById('zone-settings').classList.toggle('zone-active', zone==='settings');
+  cursor.classList.toggle('on-action', zone !== null);
+  currentZone = zone;
+}
+function pressCursor() {
+  cursor.classList.add('pressing');
+  setTimeout(() => cursor.classList.remove('pressing'), 280);
+  if (panelOpen) {
+    if (currentZone === null || currentZone === 'center') { closePanel(); return; }
+  }
+  if (currentZone === 'prev')     { if (isPaused) resume(); goPrev(); return; }
+  if (currentZone === 'next')     { if (isPaused) resume(); goNext(true); return; }
+  if (currentZone === 'settings') { togglePanel(); return; }
+  if (currentZone === 'center')   { togglePause(); return; }
+}
+
+// ══════════════════════════════════════════
+//  MOUSE — idle cursor hide
+// ══════════════════════════════════════════
+let mouseIdleTimer;
+function onMouseMove(e) {
+  cx = e.clientX; cy = e.clientY;
+  checkZones();
+  document.body.style.cursor = 'default'; // reveal system cursor briefly
+  clearTimeout(mouseIdleTimer);
+  mouseIdleTimer = setTimeout(() => { document.body.style.cursor = 'none'; }, 2000);
+}
+document.addEventListener('mousemove', onMouseMove);
+
+// ══════════════════════════════════════════
+//  TOUCH SWIPE
+// ══════════════════════════════════════════
+let touchStartX = null, touchStartY = null;
+document.addEventListener('touchstart', e => {
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, { passive:true });
+// touchend handled in ZOOM ON CLICK section below
+
+// ══════════════════════════════════════════
+//  KEYBOARD
+// ══════════════════════════════════════════
+let hintTimer;
+const hint = document.getElementById('hint');
+function resetHint() {
+  clearTimeout(hintTimer);
+  hint.classList.remove('hidden');
+  hintTimer = setTimeout(() => hint.classList.add('hidden'), 5000);
+}
+resetHint();
+
+document.addEventListener('keydown', e => {
+  resetHint();
+  if (panelOpen && e.key !== 'Escape') {
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+      const dx = e.key==='ArrowRight'?STEP:e.key==='ArrowLeft'?-STEP:0;
+      const dy = e.key==='ArrowDown'?STEP:e.key==='ArrowUp'?-STEP:0;
+      moveCursor(dx, dy);
+    }
+    return;
+  }
+  switch(e.key) {
+    case 'ArrowUp':    moveCursor(0, -STEP); break;
+    case 'ArrowDown':  moveCursor(0,  STEP); break;
+    case 'ArrowLeft':
+      if (isPaused) resume();
+      cx <= STEP + 10 ? goPrev() : moveCursor(-STEP, 0);
+      break;
+    case 'ArrowRight':
+      if (isPaused) resume();
+      cx >= window.innerWidth - STEP - 10 ? goNext() : moveCursor(STEP, 0);
+      break;
+    case ' ':
+      togglePause(); break;
+    case 'Enter':
+      pressCursor(); break;
+    case 'Escape':
+      if (isZoomed)    { zoomOut(); break; }
+      if (panelOpen)   { closePanel(); break; }
+      if (isPaused)    { resume(); break; }
+      break;
+    case 'f': case 'F':
+      document.fullscreenElement
+        ? document.exitFullscreen().catch(()=>{})
+        : document.documentElement.requestFullscreen().catch(()=>{}); break;
+    case 'MediaPlayPause':
+      togglePause(); break;
+    case 'MediaPlay':
+      resume(); break;
+    case 'MediaStop':
+      pause(); break;
+  }
+  e.preventDefault();
+});
+
+// ══════════════════════════════════════════
+//  ZOOM ON CLICK
+// ══════════════════════════════════════════
+const ZOOM_SCALE = 2.5;
+let isZoomed = false;
+
+function zoomIn(clientX, clientY) {
+  const w = window.innerWidth, h = window.innerHeight;
+  // Where on screen (0–1) did they click?
+  const px = clientX / w;
+  const py = clientY / h;
+  // Offset needed to center that point after scaling
+  const tx = (0.5 - px) * w * (ZOOM_SCALE - 1);
+  const ty = (0.5 - py) * h * (ZOOM_SCALE - 1);
+  stage.style.transformOrigin = '50% 50%';
+  stage.style.transform = `scale(${ZOOM_SCALE}) translate(${tx/ZOOM_SCALE}px, ${ty/ZOOM_SCALE}px)`;
+  document.body.classList.add('zoomed');
+  isZoomed = true;
+  if (!isPaused) pause();
+}
+
+function zoomOut() {
+  stage.style.transform = '';
+  document.body.classList.remove('zoomed');
+  isZoomed = false;
+  resume();
+}
+
+document.addEventListener('click', e => {
+  if (e.target.closest('#settings-panel')) return;
+  if (e.target.closest('#zone-settings'))  { pressCursor(); return; }
+
+  // Clicking prev/next zones while zoomed → zoom out + nav
+  if (isZoomed) {
+    zoomOut();
+    const zone = getZoneAt(e.clientX, e.clientY);
+    if (zone === 'prev') goPrev();
+    else if (zone === 'next') goNext(true);
+    return;
+  }
+
+  const zone = getZoneAt(e.clientX, e.clientY);
+  if (zone === 'prev')   { goPrev(); return; }
+  if (zone === 'next')   { goNext(true); return; }
+  if (zone === 'center') { zoomIn(e.clientX, e.clientY); return; }
+});
+
+// Touch: tap center = zoom, swipe = navigate
+document.addEventListener('touchend', e => {
+  if (touchStartX === null) return;
+  const dx = e.changedTouches[0].clientX - touchStartX;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  const isTap = Math.abs(dx) < 10 && Math.abs(dy) < 10;
+  if (isTap) {
+    if (isZoomed) { zoomOut(); }
+    else { zoomIn(e.changedTouches[0].clientX, e.changedTouches[0].clientY); }
+  }
+  touchStartX = touchStartY = null;
+});
+
+// ══════════════════════════════════════════
+//  POOL & FETCH
+// ══════════════════════════════════════════
+let pool=[], seen=new Set(), fetchDone=false, continueToken=null, sessionCat='';
+let fetchInProgress = false;
+
+async function fetchPage() {
+  if (fetchInProgress || fetchDone) return;
+  fetchInProgress = true;
+  let url =
+    `https://commons.wikimedia.org/w/api.php?action=query` +
+    `&list=categorymembers&cmtitle=Category:${encodeURIComponent(sessionCat)}` +
+    `&cmtype=file&cmlimit=30&cmnamespace=6&format=json&origin=*`;
+  if (continueToken) url += `&cmcontinue=${encodeURIComponent(continueToken)}`;
+  try {
+    const data = await (await fetch(url)).json();
+    continueToken = data?.continue?.cmcontinue || null;
+    if (!continueToken) fetchDone = true;
+    const members = data?.query?.categorymembers || [];
+    if (!members.length) { fetchDone=true; fetchInProgress=false; return; }
+    const titles = members.map(m=>m.title).join('|');
+    const infoData = await (await fetch(
+      `https://commons.wikimedia.org/w/api.php?action=query&titles=${encodeURIComponent(titles)}` +
+      `&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=1920&format=json&origin=*`
+    )).json();
+    for (const page of Object.values(infoData?.query?.pages||{})) {
+      const ii = page.imageinfo?.[0];
+      if (!ii || ii.width<800 || ii.width<ii.height*0.7) continue;
+      const imgUrl = ii.thumburl||ii.url;
+      if (!imgUrl||seen.has(imgUrl)) continue;
+      const meta  = ii.extmetadata||{};
+      const clean = s=>(s||'').replace(/<[^>]+>/g,'').trim().slice(0,70);
+      pool.push({
+        url:    imgUrl,
+        title:  clean(meta.ObjectName?.value||page.title.replace('File:','').replace(/\.[^.]+$/,'')),
+        artist: [clean(meta.Artist?.value||''),clean((meta.DateTimeOriginal||meta.Date)?.value||'')].filter(Boolean).join(' · ').slice(0,80),
+      });
+      seen.add(imgUrl);
+    }
+    // Shuffle new additions
+    for(let i=pool.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[pool[i],pool[j]]=[pool[j],pool[i]];}
+  } catch(e) { console.warn('fetch failed', e); }
+  fetchInProgress = false;
+}
+
+async function getFromPool() {
+  if (pool.length < 8 && !fetchDone) fetchPage(); // background prefetch
+  if (pool.length === 0) await fetchPage();
+  return pool.shift() || null;
+}
+
+// ══════════════════════════════════════════
+//  SLIDES, HISTORY & PRELOADING
+// ══════════════════════════════════════════
+const stage  = document.getElementById('stage');
+const label  = document.getElementById('label');
+const loader = document.getElementById('loader');
+
+let slideA, slideB, activeSlot=0;
+let history=[], histIdx=-1;
+let tick, labelOut, isBusy=false;
+let kbAlt = false; // alternate ken-burns direction each slide
+
+function makeSlide() {
+  const s = document.createElement('div');
+  s.className = 'slide';
+  const img = document.createElement('img');
+  img.style.objectFit = CFG.fit;
+  s.appendChild(img);
+  stage.appendChild(s);
+  return s;
+}
+
+function loadImg(slide, p) {
+  return new Promise((res, rej) => {
+    const img = slide.querySelector('img');
+    img.style.objectFit = CFG.fit;
+    // Reset ken-burns by removing active (animation will re-trigger on swap)
+    slide.classList.remove('kb-alt');
+    const t = setTimeout(() => rej('timeout'), 14000);
+    img.onload  = () => { clearTimeout(t); res(); };
+    img.onerror = () => { clearTimeout(t); rej(); };
+    img.src = p.url; img.alt = p.title;
+    if (img.complete && img.naturalWidth > 0) { clearTimeout(t); res(); }
+  });
+}
+
+// Preload queue
+let preloadedPainting = null;
+async function preloadNext() {
+  if (preloadedPainting) return;
+  const c = await getFromPool();
+  if (!c) return;
+  const tempImg = new Image();
+  tempImg.src = c.url;
+  preloadedPainting = c;
+}
+
+function showLabel(p) {
+  if (!CFG.showLabel) { label.classList.remove('show'); return; }
+  clearTimeout(labelOut);
+  document.getElementById('l-title').textContent  = p.title  || '';
+  document.getElementById('l-artist').textContent = p.artist || '';
+  label.classList.remove('show');
+  requestAnimationFrame(() => requestAnimationFrame(() => label.classList.add('show')));
+  labelOut = setTimeout(() => label.classList.remove('show'), CFG.labelMs);
+}
+
+function swap(p, isManual=false) {
+  const inc = activeSlot===0 ? slideB : slideA;
+  const out = activeSlot===0 ? slideA : slideB;
+  // Apply alternating ken-burns
+  kbAlt = !kbAlt;
+  if (kbAlt) inc.classList.add('kb-alt'); else inc.classList.remove('kb-alt');
+  out.classList.remove('active');
+  inc.classList.add('active');
+  activeSlot = 1 - activeSlot;
+  showLabel(p);
+  if (isManual) doFlash();
+  startProgress(CFG.showMs);
+  // Preload the one after
+  setTimeout(preloadNext, CFG.fadeMs * 1.2);
+}
+
+async function goNext(isManual=false) {
+  if (isBusy) return;
+  if (isPaused && !isManual) return;
+  if (isZoomed) zoomOut();
+  isBusy = true;
+  clearTimeout(tick);
+  stopProgress();
+
+  if (histIdx < history.length - 1) {
+    histIdx++;
+    const p = history[histIdx];
+    const inc = activeSlot===0 ? slideB : slideA;
+    try { await loadImg(inc, p); } catch { isBusy=false; goNext(isManual); return; }
+    swap(p, isManual);
+    isBusy = false;
+    tick = setTimeout(goNext, CFG.showMs);
+    return;
+  }
+
+  // Use preloaded if available
+  let p = preloadedPainting;
+  preloadedPainting = null;
+
+  if (p) {
+    const inc = activeSlot===0 ? slideB : slideA;
+    try {
+      await loadImg(inc, p);
+    } catch {
+      p = null;
+    }
+  }
+
+  // Fallback: fetch from pool
+  while (!p) {
+    const c = await getFromPool();
+    if (!c) { isBusy=false; tick=setTimeout(goNext, 2000); return; }
+    const inc = activeSlot===0 ? slideB : slideA;
+    try { await loadImg(inc, c); p = c; } catch {}
+  }
+
+  history.push(p);
+  histIdx = history.length - 1;
+  swap(p, isManual);
+  isBusy = false;
+  tick = setTimeout(goNext, CFG.showMs);
+}
+
+async function goPrev() {
+  if (isBusy || histIdx <= 0) return;
+  if (isZoomed) zoomOut();
+  isBusy = true;
+  clearTimeout(tick);
+  stopProgress();
+  histIdx--;
+  const p = history[histIdx];
+  const inc = activeSlot===0 ? slideB : slideA;
+  try { await loadImg(inc, p); } catch {}
+  swap(p, true);
+  isBusy = false;
+  tick = setTimeout(goNext, CFG.showMs);
+}
+
+async function startShow() {
+  let first = null;
+  while (!first) {
+    const c = pool.shift();
+    if (!c) { await fetchPage(); continue; }
+    try { await loadImg(slideA, c); first=c; } catch {}
+  }
+  history = [first]; histIdx = 0;
+  loader.classList.add('hide');
+  setTimeout(() => { try { loader.remove(); } catch {} }, 2600);
+  slideA.classList.add('active');
+  activeSlot = 0;
+  showLabel(first);
+  startProgress(CFG.showMs);
+  tick = setTimeout(goNext, CFG.showMs);
+  setTimeout(preloadNext, 2000);
+}
+
+async function restartShow() {
+  clearTimeout(tick); clearTimeout(labelOut);
+  stopProgress();
+  isBusy=false; history=[]; histIdx=-1;
+  pool=[]; seen=new Set(); fetchDone=false; continueToken=null;
+  preloadedPainting=null; kbAlt=false;
+  isPaused=false; document.body.classList.remove('paused');
+  pauseIndicator.classList.remove('show');
+  sessionCat = getCategory();
+  slideA.classList.remove('active'); slideB.classList.remove('active');
+  activeSlot=0; label.classList.remove('show');
+  syncCSSVars();
+  await fetchPage();
+  await startShow();
+}
+
+window.addEventListener('load', async () => {
+  slideA = makeSlide(); slideB = makeSlide();
+  sessionCat = getCategory();
+  await fetchPage();
+  startShow();
+});
+
+// ══════════════════════════════════════════
+//  SETTINGS PANEL — all live, no restart needed
+// ══════════════════════════════════════════
+const panel      = document.getElementById('settings-panel');
+const labelTrack = document.getElementById('label-track');
+const durSlider  = document.getElementById('dur-slider');
+const fadeSlider = document.getElementById('fade-slider');
+const ldSlider   = document.getElementById('labeldur-slider');
+let panelOpen    = false;
+let labelEnabled = true;
+
+function togglePanel() { panelOpen ? closePanel() : openPanel(); }
+function openPanel()  { panelOpen=true;  panel.classList.add('open'); }
+function closePanel() { panelOpen=false; panel.classList.remove('open'); }
+
+// Display time — takes effect on the next slide naturally
+durSlider.addEventListener('input', () => {
+  const s = parseInt(durSlider.value);
+  document.getElementById('dur-val').textContent = s + 's';
+  CFG.showMs = s * 1000;
+  syncCSSVars();
+});
+
+// Crossfade — apply immediately to all slides
+fadeSlider.addEventListener('input', () => {
+  const s = parseFloat(fadeSlider.value);
+  document.getElementById('fade-val').textContent = s + 's';
+  CFG.fadeMs = s * 1000;
+  syncCSSVars();
+  document.querySelectorAll('.slide').forEach(sl => sl.style.transition = `opacity ${s}s ease`);
+});
+
+// Label duration — apply immediately
+ldSlider.addEventListener('input', () => {
+  const s = parseFloat(ldSlider.value);
+  document.getElementById('labeldur-val').textContent = s + 's';
+  CFG.labelMs = s * 1000;
+});
+
+// Show label toggle — instant
+labelTrack.addEventListener('click', () => {
+  labelEnabled = !labelEnabled;
+  CFG.showLabel = labelEnabled;
+  labelTrack.classList.toggle('on', labelEnabled);
+  document.getElementById('label-toggle-txt').textContent = labelEnabled ? 'enabled' : 'disabled';
+  document.getElementById('labeldur-row').style.opacity = labelEnabled ? '1' : '0.35';
+  if (!labelEnabled) label.classList.remove('show');
+  else showLabel(history[histIdx] || {});
+});
+
+// Image fit — instant
+document.getElementById('fit-select').addEventListener('change', () => {
+  CFG.fit = document.getElementById('fit-select').value;
+  document.querySelectorAll('.slide img').forEach(img => img.style.objectFit = CFG.fit);
+});
+
+// Collection — needs new content, so restart (but auto, no button needed)
+let collectionChangeTimer;
+document.getElementById('cat-select').addEventListener('change', () => {
+  CFG.category = document.getElementById('cat-select').value;
+  clearTimeout(collectionChangeTimer);
+  collectionChangeTimer = setTimeout(() => restartShow(), 400); // tiny delay in case they're still picking
+});
+</script>
+</body>
+</html>
